@@ -1,37 +1,51 @@
-Clear-Host
-# Get all movie files, excluding specific patterns
-$movieFiles = Get-ChildItem -Path "E:\Movies" -Recurse |
-Where-Object {
-    # Only include files (not directories)
-    $_.PSIsContainer -eq $false -and
-    # Exclude files with [w] in the name
-    $_.Name -notmatch '\[w\]' -and
-    # Exclude .srt files
-    $_.Extension -ne '.srt' -and
-    # Include common video file extensions
-    $_.Extension -match '\.(mp4|mkv|avi|mov|wmv|m4v)$'
-} |
-Select-Object -ExpandProperty FullName
+# Define movie file extensions
+$movieExtensions = @(".mp4", ".mkv", ".avi", ".mov", ".wmv")
 
-# Check if any files were found
-if ($movieFiles) {
-    Write-Host "Found $($movieFiles.Count) movie files."
+# Get all movie files recursively
+$movieFiles = Get-ChildItem -Path "E:\Movies" -Recurse | 
+Where-Object { $_.Extension -in $movieExtensions }
 
-    try {
-        # Copy to clipboard
-        $movieFiles | Set-Clipboard
-        Write-Host "Successfully copied file list to clipboard."
-        Write-Host "First few files:"
-        $movieFiles | Select-Object -First 3 | ForEach-Object { Write-Host $_ }
+# Initialize counters
+$totalMovies = 0
+$watchedMovies = 0
+$nonWatchedMovies = 0
+$errorMovies = 0
+$unwatchedTitles = @()
+
+# Process each movie file
+foreach ($file in $movieFiles) {
+    $totalMovies++
+    
+    # Check for watched tag
+    if ($file.Name -match '\[w\]') {
+        $watchedMovies++
     }
-    catch {
-        Write-Host "Error copying to clipboard: $_"
+    else {
+        $nonWatchedMovies++
+        # Add to unwatched list, removing extension and common tags
+        $cleanTitle = $file.BaseName -replace '\[.*?\]', '' -replace '^\s+|\s+$', ''
+        $unwatchedTitles += $cleanTitle
+    }
+    
+    # Check for error tag
+    if ($file.Name -match '\[error\]') {
+        $errorMovies++
     }
 }
+
+# Print statistics
+Write-Host "Movie Collection Analysis" -ForegroundColor Cyan
+Write-Host "======================" -ForegroundColor Cyan
+Write-Host "Total movies: $totalMovies"
+Write-Host "Watched movies: $watchedMovies"
+Write-Host "Unwatched movies: $nonWatchedMovies"
+Write-Host "Movies with errors: $errorMovies"
+
+# Copy unwatched titles to clipboard
+if ($unwatchedTitles.Count -gt 0) {
+    $unwatchedTitles | Set-Clipboard
+    Write-Host "`nUnwatched movie titles have been copied to clipboard!" -ForegroundColor Green
+}
 else {
-    Write-Host "No movie files found in E:\Movies matching the criteria."
-    Write-Host "Please verify:"
-    Write-Host "1. The path E:\Movies exists"
-    Write-Host "2. You have permission to access the directory"
-    Write-Host "3. There are video files with extensions .mp4, .mkv, .avi, .mov, .wmv, or .m4v"
+    Write-Host "`nNo unwatched movies found!" -ForegroundColor Yellow
 }
