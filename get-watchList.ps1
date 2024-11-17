@@ -36,9 +36,9 @@ foreach ($file in $movieFiles) {
 # Print statistics
 Write-Host "Movie Collection Analysis" -ForegroundColor Cyan
 Write-Host "======================" -ForegroundColor Cyan
-Write-Host "Total movies: $totalMovies"
-Write-Host "Watched movies: $watchedMovies"
-Write-Host "Unwatched movies: $nonWatchedMovies"
+Write-Host "Total movies:       $totalMovies"
+Write-Host "Watched movies:     $watchedMovies"
+Write-Host "Unwatched movies:   $nonWatchedMovies"
 Write-Host "Movies with errors: $errorMovies"
 
 # Copy unwatched titles to clipboard
