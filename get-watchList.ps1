@@ -49,3 +49,5 @@ if ($unwatchedTitles.Count -gt 0) {
 else {
     Write-Host "`nNo unwatched movies found!" -ForegroundColor Yellow
 }
+
+pause
