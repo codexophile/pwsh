@@ -124,7 +124,6 @@ $form.Add_DragDrop({
             $outputBox.AppendText("Processing file: $file`r`n")
             try {
 
-                # You can modify this section to handle the files however you want
                 $fileInfo = Get-Item $file
                 $outputBox.AppendText("Size: $($fileInfo.Length) bytes`r`n")
                 $outputBox.AppendText("Last Modified: $($fileInfo.LastWriteTime)`r`n")
