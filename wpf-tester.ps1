@@ -120,6 +120,7 @@ $form.Add_DragEnter({
 
 $form.Add_DragDrop({
         $files = $_.Data.GetData([Windows.Forms.DataFormats]::FileDrop)
+        $outputBox.Clear()
         foreach ($file in $files) {
             $outputBox.AppendText("Processing file: $file`r`n")
             try {
