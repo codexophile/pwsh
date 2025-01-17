@@ -33,6 +33,7 @@ $sync = [hashtable]::Synchronized(@{
     StatusText  = $statusText
     Window      = $window
     Completed   = $false
+    Output      = New-Object System.Collections.ArrayList
   })
 
 # Create and start a new runspace for the download
@@ -44,7 +45,7 @@ $runspace.SessionStateProxy.SetVariable('sync', $sync)
 
 $downloadJob = [powershell]::Create().AddScript({
     # Sample video URL - replace with your desired URL
-    $videoUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    $videoUrl = "https://www.youtube.com/watch?v=As6QAVuEqDY"
     $ytDlpPath = "D:\Program Files - Portable\youtube-dl\yt-dlp.exe"
     
     # Create process start info
@@ -53,23 +54,24 @@ $downloadJob = [powershell]::Create().AddScript({
     $psi.Arguments = "--newline --progress-template `"progress:%(progress._percent_str)s`" $videoUrl"
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
     $psi.CreateNoWindow = $true
     
     try {
-      # Start the process
       $process = New-Object System.Diagnostics.Process
       $process.StartInfo = $psi
       $process.Start() | Out-Null
         
-      # Read output line by line
       while (!$process.StandardOutput.EndOfStream) {
         $line = $process.StandardOutput.ReadLine()
+            
+        # Add to synchronized output collection
+        $sync.Output.Add($line) | Out-Null
             
         if ($line.StartsWith("progress:")) {
           $percentStr = $line.Substring(9).Trim(' %')
           $percent = [double]$percentStr
                 
-          # Update UI elements on the UI thread
           $sync.Window.Dispatcher.Invoke([action] {
               $sync.ProgressBar.Value = $percent
               $sync.StatusText.Text = "Downloaded: $percentStr%"
@@ -77,31 +79,59 @@ $downloadJob = [powershell]::Create().AddScript({
         }
       }
         
-      # Wait for process to complete
+      $errorOutput = $process.StandardError.ReadToEnd()
+      if ($errorOutput) {
+        $sync.Output.Add("[ERROR] $errorOutput") | Out-Null
+      }
+        
       $process.WaitForExit()
         
-      # Update UI on completion
       $sync.Window.Dispatcher.Invoke([action] {
           $sync.StatusText.Text = "Download complete!"
           $sync.Completed = $true
         })
+      $sync.Output.Add("[SUCCESS] Download complete!") | Out-Null
     }
     catch {
+      $errorMessage = "Error: $_"
       $sync.Window.Dispatcher.Invoke([action] {
-          $sync.StatusText.Text = "Error: $_"
+          $sync.StatusText.Text = $errorMessage
           $sync.Completed = $true
         })
+      $sync.Output.Add("[ERROR] $errorMessage") | Out-Null
     }
   })
 
 $downloadJob.Runspace = $runspace
 $handle = $downloadJob.BeginInvoke()
 
+# Create a timer to check for new output
+$timer = New-Object System.Windows.Threading.DispatcherTimer
+$timer.Interval = [TimeSpan]::FromMilliseconds(100)
+$lastIndex = 0
+$timer.Add_Tick({
+    while ($lastIndex -lt $sync.Output.Count) {
+      $line = $sync.Output[$lastIndex]
+      if ($line.StartsWith("[ERROR]")) {
+        Write-Host $line.Substring(7) -ForegroundColor Red
+      }
+      elseif ($line.StartsWith("[SUCCESS]")) {
+        Write-Host $line.Substring(9) -ForegroundColor Green
+      }
+      else {
+        Write-Host $line
+      }
+      $lastIndex++
+    }
+  })
+$timer.Start()
+
 # Add window closing event handler
 $window.Add_Closed({
     if (-not $sync.Completed) {
       $downloadJob.Stop()
     }
+    $timer.Stop()
     $runspace.Close()
     $runspace.Dispose()
   })
