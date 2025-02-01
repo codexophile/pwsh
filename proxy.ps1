@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms
 [System.Windows.Forms.SendKeys]::SendWait("%{TAB}") #Return focus to the original window.
 Clear-Host
-. ( 'D:\Mega\IDEs\powershell\functions.ps1' )
+. ( 'C:\mega\IDEs\powershell\functions.ps1' )
 
 (get-netconnectionProfile).Name 
 
