@@ -11,6 +11,7 @@ $watchedMovies = 0
 $nonWatchedMovies = 0
 $errorMovies = 0
 $unwatchedTitles = @()
+$watchedFiles = @()
 
 $totalSize = 0
 $watchedSize = 0
@@ -26,6 +27,7 @@ foreach ($file in $movieFiles) {
   if ($file.Name -match '\[w\]') {
     $watchedMovies++
     $watchedSize += $file.Length
+    $watchedFiles += $file
   }
   else {
     $nonWatchedMovies++
@@ -67,13 +69,42 @@ Write-Host
 Write-Host "Movies with errors: $errorMovies"
 Write-Host "Error size:         $(Format-FileSize $errorSize)"
 
-# Copy unwatched titles to clipboard
+# Ask user if they want to copy unwatched titles to clipboard
 if ($unwatchedTitles.Count -gt 0) {
-  $unwatchedTitles | Set-Clipboard
-  Write-Host "`nUnwatched movie titles have been copied to clipboard!" -ForegroundColor Green
+  $copyChoice = Read-Host "`nWould you like to copy unwatched movie titles to clipboard? (y/n)"
+  if ($copyChoice -eq 'y') {
+    $unwatchedTitles | Set-Clipboard
+    Write-Host "Unwatched movie titles have been copied to clipboard!" -ForegroundColor Green
+  }
 }
 else {
   Write-Host "`nNo unwatched movies found!" -ForegroundColor Yellow
+}
+
+# Ask user if they want to move watched movies to recycle bin
+if ($watchedFiles.Count -gt 0) {
+  $recycleChoice = Read-Host "`nWould you like to move watched movies to recycle bin? (y/n)"
+  if ($recycleChoice -eq 'y') {
+    $confirmRecycle = Read-Host "Are you sure? This will move $watchedMovies movies ($(Format-FileSize $watchedSize)) to recycle bin (y/n)"
+    if ($confirmRecycle -eq 'y') {
+      foreach ($file in $watchedFiles) {
+        try {
+          $shell = New-Object -ComObject "Shell.Application"
+          $item = $shell.Namespace(0).ParseName($file.FullName)
+          $item.InvokeVerb("delete")
+          Write-Host "Moved to recycle bin: $($file.Name)" -ForegroundColor Yellow
+        }
+        catch {
+          Write-Host "Error moving file: $($file.Name)" -ForegroundColor Red
+          Write-Host $_.Exception.Message
+        }
+      }
+      Write-Host "`nCompleted moving watched movies to recycle bin!" -ForegroundColor Green
+    }
+    else {
+      Write-Host "Operation cancelled" -ForegroundColor Yellow
+    }
+  }
 }
 
 pause
