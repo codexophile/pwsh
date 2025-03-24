@@ -12,6 +12,7 @@ $nonWatchedMovies = 0
 $errorMovies = 0
 $unwatchedTitles = @()
 $watchedFiles = @()
+$watchedSubtitles = @()
 
 $totalSize = 0
 $watchedSize = 0
@@ -28,6 +29,13 @@ foreach ($file in $movieFiles) {
     $watchedMovies++
     $watchedSize += $file.Length
     $watchedFiles += $file
+        
+    # Find corresponding subtitle file
+    $subtitlePath = [System.IO.Path]::ChangeExtension($file.FullName, ".srt")
+    if (Test-Path $subtitlePath) {
+      $watchedSubtitles += Get-Item $subtitlePath
+      $watchedSize += (Get-Item $subtitlePath).Length
+    }
   }
   else {
     $nonWatchedMovies++
@@ -83,13 +91,16 @@ else {
 
 # Ask user if they want to move watched movies to recycle bin
 if ($watchedFiles.Count -gt 0) {
-  $recycleChoice = Read-Host "`nWould you like to move watched movies to recycle bin? (y/n)"
+  $totalFilesToDelete = $watchedFiles.Count + $watchedSubtitles.Count
+  $recycleChoice = Read-Host "`nWould you like to move watched movies and their subtitles to recycle bin? (y/n)"
   if ($recycleChoice -eq 'y') {
-    $confirmRecycle = Read-Host "Are you sure? This will move $watchedMovies movies ($(Format-FileSize $watchedSize)) to recycle bin (y/n)"
+    $confirmRecycle = Read-Host "Are you sure? This will move $totalFilesToDelete files ($(Format-FileSize $watchedSize)) to recycle bin (y/n)"
     if ($confirmRecycle -eq 'y') {
+      $shell = New-Object -ComObject "Shell.Application"
+            
+      # Process movie files
       foreach ($file in $watchedFiles) {
         try {
-          $shell = New-Object -ComObject "Shell.Application"
           $item = $shell.Namespace(0).ParseName($file.FullName)
           $item.InvokeVerb("delete")
           Write-Host "Moved to recycle bin: $($file.Name)" -ForegroundColor Yellow
@@ -99,7 +110,21 @@ if ($watchedFiles.Count -gt 0) {
           Write-Host $_.Exception.Message
         }
       }
-      Write-Host "`nCompleted moving watched movies to recycle bin!" -ForegroundColor Green
+            
+      # Process subtitle files
+      foreach ($subtitle in $watchedSubtitles) {
+        try {
+          $item = $shell.Namespace(0).ParseName($subtitle.FullName)
+          $item.InvokeVerb("delete")
+          Write-Host "Moved to recycle bin: $($subtitle.Name)" -ForegroundColor Yellow
+        }
+        catch {
+          Write-Host "Error moving subtitle: $($subtitle.Name)" -ForegroundColor Red
+          Write-Host $_.Exception.Message
+        }
+      }
+            
+      Write-Host "`nCompleted moving watched movies and subtitles to recycle bin!" -ForegroundColor Green
     }
     else {
       Write-Host "Operation cancelled" -ForegroundColor Yellow
