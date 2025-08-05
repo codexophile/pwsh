@@ -3,7 +3,7 @@ set-location $PSScriptRoot
 . .\#lib\functions.ps1
 
 # Configuration
-$scrcpyPath = 'D:\Program Files - Portable\scrcpy\scrcpy.exe'
+$scrcpyPath = 'B:\Program Files - Portable\scrcpy\scrcpy.exe'
 $outputDirectory = "W:\#later\#scrcpy"
 
 function Show-MessageBox {
