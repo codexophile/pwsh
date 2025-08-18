@@ -26,10 +26,10 @@ function Invoke-Scrcpy {
 function Start-DeviceDetection {
   Write-Host "`nDetecting device..." -ForegroundColor Cyan
   $result = Invoke-Scrcpy --tcpip
-  Process-ScrcpyResult $result
+  Resolve-ScrcpyResult $result
 }
 
-function Process-ScrcpyResult {
+function Resolve-ScrcpyResult {
   param([string[]]$Result)
     
   switch -Regex ($Result) {
