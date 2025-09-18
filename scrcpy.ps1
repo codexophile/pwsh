@@ -3,7 +3,7 @@ set-location $PSScriptRoot
 . .\#lib\functions.ps1
 
 # Configuration
-$scrcpyPath = 'B:\Program Files - Portable\scrcpy\scrcpy.exe'
+$esPath = 'C:\mega\program-files\Everything\es.exe'
 $outputDirectory = "W:\#later\#scrcpy"
 
 function Show-MessageBox {
@@ -55,12 +55,24 @@ function Start-ScrcpyRecording {
   $result = Invoke-Scrcpy --record=$destination 
   [console]::Beep(200, 50)
 
-  Process-ScrcpyResult $result
-    
+  Resolve-ScrcpyResult $result
+
   if (Show-MessageBox 'Run again?' -ButtonType 'YesNo' -IconType 'Question' -eq 'Yes') {
     Start-ScrcpyRecording
   }
 }
+
+$esArguments = @('-instance', '1.5a', 'scrcpy', 'endwith:.exe')
+Write-Host "Searching for scrcpy.exe using Everything..."
+$esResult = & $esPath $esArguments
+
+# If multiple lines, pick the first one
+if ($esResult -is [array] -or $esResult.Contains("`n")) {
+    $esResult = ($esResult -split "`n")[0].Trim()
+}
+
+Write-Host "Found at: `n$esResult"
+$scrcpyPath = $esResult
 
 # Main execution
 Start-ScrcpyRecording
