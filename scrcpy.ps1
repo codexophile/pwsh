@@ -4,7 +4,7 @@ set-location $PSScriptRoot
 
 # Configuration
 $esPath = 'C:\mega\program-files\Everything\es.exe'
-$outputDirectory = "W:\#later\#scrcpy"
+$outputDirectory = "X:\#scrcpy"
 
 function Show-MessageBox {
   param(
