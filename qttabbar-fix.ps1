@@ -35,7 +35,7 @@ foreach ($id in $viveIds) {
 }
 
 if ($allSucceeded) {
-	Write-Host "ViVeTool changes completed successfully."
+	Write-Host "ViVeTool changes completed successfully." -ForegroundColor Green
 }
 else {
 	Write-Warning "One or more ViVeTool commands failed."
