@@ -1,6 +1,21 @@
 . "C:\mega\IDEs\powershell\#lib\functions.ps1"
 RunAsAdmin
 
+# Create a system restore point before making any changes
+Write-Host "`n--- Creating System Restore Point ---" -ForegroundColor Cyan
+try {
+	$restorePointDescription = "QTTabBar Fix - ViVeTool and Registry Modifications"
+	Checkpoint-Computer -Description $restorePointDescription -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
+	Write-Host "SUCCESS: System restore point created: '$restorePointDescription'" -ForegroundColor Green
+} catch {
+	Write-Warning "Could not create system restore point: $_"
+	$proceed = Read-Host "Continue anyway? (Y/N)"
+	if ($proceed -notmatch '^(?i)y(?:es)?$') {
+		Write-Host "Exiting script." -ForegroundColor Yellow
+		Exit
+	}
+}
+
 $viveToolPath = Join-Path $env:SystemDrive "Program Files (Portable)\ViVeTool\ViVeTool.exe"
 
 if (-not (Test-Path -LiteralPath $viveToolPath -PathType Leaf)) {
