@@ -4,7 +4,7 @@ RunAsAdmin
 # Create a system restore point before making any changes
 Write-Host "`n--- Creating System Restore Point ---" -ForegroundColor Cyan
 try {
-	$restorePointDescription = "QTTabBar Fix - ViVeTool and Registry Modifications"
+	$restorePointDescription = "QTTabBar Fix - ViVeTool and Registry Lock"
 	Checkpoint-Computer -Description $restorePointDescription -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
 	Write-Host "SUCCESS: System restore point created: '$restorePointDescription'" -ForegroundColor Green
 } catch {
@@ -64,14 +64,12 @@ using System.Runtime.InteropServices;
 public class TokenPrivilege {[DllImport("advapi32.dll", ExactSpelling = true, SetLastError = true)]
     internal static extern bool AdjustTokenPrivileges(IntPtr htok, bool disall, ref TOKEN_PRIVILEGES newst, int len, IntPtr prev, IntPtr relen);[DllImport("advapi32.dll", ExactSpelling = true, SetLastError = true)]
     internal static extern bool OpenProcessToken(IntPtr h, int acc, ref IntPtr phtok);[DllImport("advapi32.dll", SetLastError = true)]
-    internal static extern bool LookupPrivilegeValue(string host, string name, ref LUID pluid);
-    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    internal static extern bool LookupPrivilegeValue(string host, string name, ref LUID pluid);[StructLayout(LayoutKind.Sequential, Pack = 1)]
     internal struct TOKEN_PRIVILEGES {
         public int PrivilegeCount;
         public LUID Privileges;
         public int Attributes;
-    }
-    [StructLayout(LayoutKind.Sequential)]
+    }[StructLayout(LayoutKind.Sequential)]
     internal struct LUID {
         public uint LowPart;
         public int HighPart;
@@ -96,27 +94,30 @@ try {
 
 $registryIds = @("815149711", "5077241", "4070466697", "1519792783", "1482552975")
 $baseRegPath = "HKLM:\SYSTEM\CurrentControlSet\Control\FeatureManagement\Overrides"
+
 $adminGroup = New-Object System.Security.Principal.NTAccount("Administrators")
+$systemAccount = New-Object System.Security.Principal.NTAccount("SYSTEM")
+$tiAccount = New-Object System.Security.Principal.NTAccount("NT SERVICE\TrustedInstaller")
 
-Write-Host "`n--- Starting Registry Key Fixes (Using .NET Method) ---" -ForegroundColor Cyan
+Write-Host "`n--- Starting Registry Key Fixes & Lockdown ---" -ForegroundColor Cyan
 
-# Find keys and select only unique paths to prevent duplicates
-$keysToDelete = Get-ChildItem -Path $baseRegPath -Recurse -ErrorAction SilentlyContinue | 
+# Find keys and select only unique paths
+$keysToLock = Get-ChildItem -Path $baseRegPath -Recurse -ErrorAction SilentlyContinue | 
     Where-Object { $registryIds -contains $_.PSChildName } | 
     Select-Object -Unique PSPath, Name
 
-if ($keysToDelete.Count -eq 0) {
-    Write-Host "No matching registry keys found. They may already be deleted." -ForegroundColor Yellow
+if ($keysToLock.Count -eq 0) {
+    Write-Host "No matching registry keys found. ViVeTool might not have created them, or they are already locked." -ForegroundColor Yellow
 } else {
-    foreach ($key in $keysToDelete) {
+    foreach ($key in $keysToLock) {
         $regName = ($key.Name -split '\\')[-1]
         $subKeyPath = $key.Name -replace '^HKEY_LOCAL_MACHINE\\', ''
         
         Write-Host "Processing Registry Key: $regName"
         
         try {
-            # Step A: Explicitly request ONLY TakeOwnership rights
-            $regKeyOwner = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($subKeyPath, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::TakeOwnership)
+            # Step A: Request TakeOwnership rights
+            $regKeyOwner =[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($subKeyPath, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::TakeOwnership)
             if ($null -eq $regKeyOwner) { throw "Could not open key to Take Ownership." }
             
             $acl = $regKeyOwner.GetAccessControl()
@@ -125,21 +126,59 @@ if ($keysToDelete.Count -eq 0) {
             $regKeyOwner.Close()
 
             # Step B: Re-open with Permission Changing rights
-            $regKeyPerms = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($subKeyPath,[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ChangePermissions)
+            $regKeyPerms =[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($subKeyPath,[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ChangePermissions)
             $acl = $regKeyPerms.GetAccessControl()
-            $accessRule = New-Object System.Security.AccessControl.RegistryAccessRule($adminGroup, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+            $accessRule = New-Object System.Security.AccessControl.RegistryAccessRule($adminGroup, "FullControl", "ContainerInherit", "None", "Allow")
             $acl.SetAccessRule($accessRule)
             $regKeyPerms.SetAccessControl($acl)
             $regKeyPerms.Close()
 
-            # Step C: Delete the key
-            [Microsoft.Win32.Registry]::LocalMachine.DeleteSubKeyTree($subKeyPath, $false)
+            # Step C: Empty out the key values instead of deleting the folder entirely
+            $regKeyWrite = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($subKeyPath, $true)
+            if ($regKeyWrite) {
+                foreach ($valName in $regKeyWrite.GetValueNames()) {
+                    $regKeyWrite.DeleteValue($valName, $false)
+                }
+                $regKeyWrite.Close()
+            }
+
+            # Step D: Apply the Registry Lock (Deny SYSTEM and TrustedInstaller Write Access)
+            $regKeyLock =[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($subKeyPath,[Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree,[System.Security.AccessControl.RegistryRights]::ChangePermissions)
+            $aclLock = $regKeyLock.GetAccessControl()
             
-            Write-Host "SUCCESS: Deleted registry key $regName" -ForegroundColor Green
+            $denySystem = New-Object System.Security.AccessControl.RegistryAccessRule($systemAccount, "WriteKey, Delete", "ContainerInherit", "None", "Deny")
+            $denyTI = New-Object System.Security.AccessControl.RegistryAccessRule($tiAccount, "WriteKey, Delete", "ContainerInherit", "None", "Deny")
+            
+            $aclLock.AddAccessRule($denySystem)
+            $aclLock.AddAccessRule($denyTI)
+            $regKeyLock.SetAccessControl($aclLock)
+            $regKeyLock.Close()
+            
+            Write-Host "SUCCESS: Emptied and permanently LOCKED registry key $regName against Windows Update" -ForegroundColor Green
         }
         catch {
             Write-Host "FAILED: $_" -ForegroundColor Red
         }
+    }
+}
+
+Write-Host "`n--- Disabling Windows Feature Reconciliation Tasks ---" -ForegroundColor Cyan
+$tasksToDisable = @(
+    @{ Path = "\Microsoft\Windows\Flighting\FeatureConfig\"; Name = "ReconcileFeatures" },
+    @{ Path = "\Microsoft\Windows\Flighting\OneSettings\"; Name = "RefreshCache" }
+)
+
+foreach ($task in $tasksToDisable) {
+    try {
+        $existingTask = Get-ScheduledTask -TaskPath $task.Path -TaskName $task.Name -ErrorAction SilentlyContinue
+        if ($existingTask) {
+            Disable-ScheduledTask -TaskPath $task.Path -TaskName $task.Name -ErrorAction Stop
+            Write-Host "SUCCESS: Disabled scheduled task '$($task.Name)'" -ForegroundColor Green
+        } else {
+            Write-Host "SKIPPED: Task '$($task.Name)' not found." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Warning "Failed to disable task '$($task.Name)'."
     }
 }
 
